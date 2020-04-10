@@ -29,7 +29,7 @@ func TestNew(t *testing.T) {
 	if x == nil {
 		t.Errorf("expected obj")
 	}
-	checkNum(x.NumberOfReplicas, 20, t)
+	checkNum(x.NumberOfReplicas(), 20, t)
 }
 
 func TestAdd(t *testing.T) {
@@ -689,7 +689,7 @@ func TestCollisionsCRC(t *testing.T) {
 	count := 0
 	for scanner.Scan() {
 		word := scanner.Text()
-		for i := 0; i < c.NumberOfReplicas; i++ {
+		for i := 0; i < c.NumberOfReplicas(); i++ {
 			ekey := c.eltKey(word, i)
 			// ekey := word + "|" + strconv.Itoa(i)
 			k := c.hashKey(ekey)

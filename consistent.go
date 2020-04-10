@@ -48,22 +48,39 @@ type Consistent struct {
 	circle           map[uint32]string
 	members          map[string]bool
 	sortedHashes     uints
-	NumberOfReplicas int
+	numberOfReplicas int
 	count            int64
 	scratch          [64]byte
 	UseFnv           bool
+	customHashFunc   func(string) uint32
+	once             *sync.Once
 	sync.RWMutex
 }
+
+const _defaultNumofReplicas = 20
 
 // New creates a new Consistent object with a default setting of 20 replicas for each entry.
 //
 // To change the number of replicas, set NumberOfReplicas before adding entries.
 func New() *Consistent {
-	c := new(Consistent)
-	c.NumberOfReplicas = 20
-	c.circle = make(map[uint32]string)
-	c.members = make(map[string]bool)
-	return c
+	return &Consistent{
+		numberOfReplicas: _defaultNumofReplicas,
+		circle:           make(map[uint32]string),
+		members:          make(map[string]bool),
+		once:             &sync.Once{},
+	}
+}
+
+// SetRepNum set the number of replicas
+func (c *Consistent) SetRepNum(n int) {
+	c.once.Do(func() {
+		c.numberOfReplicas = n
+	})
+}
+
+// NumberOfReplicas return the number of replicas
+func (c *Consistent) NumberOfReplicas() int {
+	return c.numberOfReplicas
 }
 
 // eltKey generates a string key for an element with an index.
@@ -81,7 +98,7 @@ func (c *Consistent) Add(elt string) {
 
 // need c.Lock() before calling
 func (c *Consistent) add(elt string) {
-	for i := 0; i < c.NumberOfReplicas; i++ {
+	for i := 0; i < c.numberOfReplicas; i++ {
 		c.circle[c.hashKey(c.eltKey(elt, i))] = elt
 	}
 	c.members[elt] = true
@@ -98,7 +115,7 @@ func (c *Consistent) Remove(elt string) {
 
 // need c.Lock() before calling
 func (c *Consistent) remove(elt string) {
-	for i := 0; i < c.NumberOfReplicas; i++ {
+	for i := 0; i < c.numberOfReplicas; i++ {
 		delete(c.circle, c.hashKey(c.eltKey(elt, i)))
 	}
 	delete(c.members, elt)
@@ -238,6 +255,9 @@ func (c *Consistent) GetN(name string, n int) ([]string, error) {
 }
 
 func (c *Consistent) hashKey(key string) uint32 {
+	if c.customHashFunc != nil {
+		return c.customHashFunc(key)
+	}
 	if c.UseFnv {
 		return c.hashKeyFnv(key)
 	}
@@ -262,7 +282,7 @@ func (c *Consistent) hashKeyFnv(key string) uint32 {
 func (c *Consistent) updateSortedHashes() {
 	hashes := c.sortedHashes[:0]
 	//reallocate if we're holding on to too much (1/4th)
-	if cap(c.sortedHashes)/(c.NumberOfReplicas*4) > len(c.circle) {
+	if cap(c.sortedHashes)/(c.numberOfReplicas*4) > len(c.circle) {
 		hashes = nil
 	}
 	for k := range c.circle {
